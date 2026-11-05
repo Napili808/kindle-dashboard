@@ -1,0 +1,14 @@
+# Serves output/dashboard.png on port 8080 so the Kindle can download it:
+#   http://pihole.local:8080/dashboard.png
+[Unit]
+Description=Serve Kindle dashboard image
+After=network-online.target
+
+[Service]
+User=minh
+WorkingDirectory=/home/minh/kindle-dashboard/output
+ExecStart=/usr/bin/python3 -m http.server 8080 --bind 0.0.0.0
+Restart=on-failure
+
+[Install]
+WantedBy=multi-user.target

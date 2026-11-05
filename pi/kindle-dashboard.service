@@ -1,0 +1,11 @@
+# Rebuilds the dashboard image. Triggered by kindle-dashboard.timer.
+[Unit]
+Description=Build Kindle dashboard image
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=oneshot
+User=minh
+WorkingDirectory=/home/minh/kindle-dashboard
+ExecStart=/usr/bin/python3 /home/minh/kindle-dashboard/make_dashboard.py

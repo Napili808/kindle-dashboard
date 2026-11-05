@@ -1,0 +1,11 @@
+# Run the dashboard build every 15 minutes, and once shortly after boot.
+[Unit]
+Description=Rebuild Kindle dashboard every 15 minutes
+
+[Timer]
+OnBootSec=1min
+OnCalendar=*:0/15
+Persistent=true
+
+[Install]
+WantedBy=timers.target

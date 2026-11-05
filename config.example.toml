@@ -1,0 +1,25 @@
+# Copy this file to config.toml and edit it. config.toml is ignored by git,
+# so anything private (like a calendar link) stays on the Pi.
+
+[location]
+name = "Lahaina, Maui"
+latitude = 20.878
+longitude = -156.682
+timezone = "Pacific/Honolulu"
+
+[weather]
+# Open-Meteo is free and needs no API key.
+units = "imperial"          # "imperial" (°F, mph) or "metric" (°C, km/h)
+
+[tides]
+enabled = true
+# NOAA CO-OPS station ID. 1615680 = Kahului Harbor, Maui.
+# Find stations near you: https://tidesandcurrents.noaa.gov/map/
+station_id = "1615680"
+station_name = "Kahului"
+
+[display]
+# Kindle Paperwhite 5 (11th gen) screen, portrait.
+width = 1236
+height = 1648
+output_path = "output/dashboard.png"
