@@ -8,7 +8,7 @@ An always-on e-ink dashboard for Maui, laid out for a Kindle turned on its side:
 
 ```
 Open-Meteo (weather) ─┐
-                      ├─► Raspberry Pi 3 ── builds dashboard.png every 15 min ── serves it on :8080
+                      ├─► Raspberry Pi 3 ── builds dashboard.png every 30 min ── serves it on :8080
 NOAA (tides) ─────────┘                                                              │
                                                      Kindle Paperwhite 5 ◄── downloads & displays
 ```
@@ -49,7 +49,7 @@ sudo systemctl enable --now kindle-dashboard.timer kindle-dashboard-web.service
 Check it from any device on your Wi-Fi: `http://<pi-ip>:8080/dashboard.png`
 (In landscape mode the file is saved turned sideways, because that's how the Kindle's screen expects it.)
 
-**Orientation:** `orientation = "landscape"` (default) or `"portrait"` in `config.toml`. If the landscape dashboard appears upside down on the Kindle, set `rotate = 270`.
+**Orientation:** `orientation = "landscape"` (default) or `"portrait"` in `config.toml`. `rotate = 270` puts the Kindle logo on the right; `rotate = 90` puts it on the left.
 
 Get updates later:
 

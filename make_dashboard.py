@@ -92,7 +92,7 @@ def main() -> int:
     # sideways before saving. Set rotate = 270 if it shows up upside down.
     disp = cfg["display"]
     if disp.get("orientation", "landscape") == "landscape" and not args.no_rotate:
-        img = img.rotate(int(disp.get("rotate", 90)), expand=True)
+        img = img.rotate(int(disp.get("rotate", 270)), expand=True)
 
     out = args.out or cfg["display"]["output_path"]
     if not os.path.isabs(out):

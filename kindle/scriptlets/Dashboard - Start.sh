@@ -4,7 +4,7 @@
 #
 # Kindle scriptlet: copy this file into the Kindle's documents folder, then tap
 # it in your library. It hides the normal Kindle screen and shows the dashboard
-# image from the Raspberry Pi, refreshing every 15 minutes.
+# image from the Raspberry Pi, refreshing every 30 minutes.
 #
 # To stop: hold the power button ~40 seconds until the Kindle restarts.
 # Keep the Kindle plugged in; it stays awake with Wi-Fi on.
@@ -13,7 +13,7 @@
 PI_IP="192.168.1.50"
 # -------------------------------------------------------------------------------------
 
-REFRESH_SECONDS=900
+REFRESH_SECONDS=1800      # 30 minutes, matches the Pi timer
 FULL_FLASH_EVERY=4
 PI_URL="http://${PI_IP}:8080/dashboard.png"
 LOOP=/tmp/kindle-dashboard-loop.sh
