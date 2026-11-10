@@ -59,16 +59,18 @@ cd ~/kindle-dashboard && git pull
 
 ## Kindle setup
 
+Uses **scriptlets**, the current way to run homebrew on jailbroken Kindles (KUAL is obsolete on newer firmware).
+
 1. **Check firmware first** (Settings → Device Options → Device Info) with Wi-Fi off, so it can't auto-update.
-2. Jailbreak with a method that supports your firmware (see [kindlemodding.org](https://kindlemodding.org/)), then install the hotfix, KUAL and MRPI.
-3. Edit `kindle/extensions/kindle-dashboard/settings.sh` and set `PI_IP` to your Pi's IP address.
-4. Plug the Kindle into your computer and copy the whole `kindle-dashboard` folder into the Kindle's `extensions` folder, so you have `extensions/kindle-dashboard/menu.json` on the Kindle.
-5. Eject, open **KUAL** from your library → **Kindle Dashboard** → **Test connection to Pi**. You should see an "OK" line.
-6. **Start dashboard.** Keep the Kindle plugged into power; it stays awake with Wi-Fi on.
+2. Jailbreak with a method that supports your firmware (see [kindlemodding.org](https://kindlemodding.org/)). Tested target: Paperwhite 5 on 5.19.2 with Véra.
+3. Open both files in `kindle/scriptlets/` and set `PI_IP` to your Pi's IP address.
+4. Plug the Kindle into your computer and copy both `.sh` files into the Kindle's `documents` folder.
+5. Eject. Turn Wi-Fi on. In your library, tap **Dashboard - Test**. An "OK" line should appear near the bottom of the screen.
+6. Tap **Dashboard - Start**. Keep the Kindle plugged into power; it stays awake with Wi-Fi on.
 
-To get back to the normal Kindle: KUAL → Kindle Dashboard → Stop. If the screen is stuck on the dashboard, hold the power button ~40 seconds to restart.
+To get back to the normal Kindle: hold the power button ~40 seconds until it restarts.
 
-The 5.19.x firmware details (upstart UI jobs, KUAL's dead stdout) come from TRMNL's MIT-licensed [trmnl-kindle](https://github.com/usetrmnl/trmnl-kindle) client.
+The 5.19.x firmware details (upstart UI jobs) come from TRMNL's MIT-licensed [trmnl-kindle](https://github.com/usetrmnl/trmnl-kindle) client.
 
 ## Try it without any hardware
 
@@ -81,5 +83,5 @@ python3 make_dashboard.py --sample      # made-up data, no internet needed
 
 - [ ] Google Calendar events (via private iCal link in `config.toml`)
 - [ ] Surf / wind conditions for OC6 paddling
-- [ ] Kindle KUAL extension tested on real hardware
+- [ ] Kindle scriptlets tested on real hardware
 - [ ] Night mode (lighter refresh schedule overnight)
