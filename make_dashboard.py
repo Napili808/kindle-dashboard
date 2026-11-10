@@ -64,6 +64,7 @@ def main() -> int:
     ap.add_argument("--config", default=os.path.join(HERE, "config.toml"))
     ap.add_argument("--sample", action="store_true", help="use made-up data instead of fetching")
     ap.add_argument("--out", help="override output path")
+    ap.add_argument("--no-rotate", action="store_true", help="save upright (for previews)")
     args = ap.parse_args()
 
     cfg = load_config(args.config)
@@ -86,6 +87,12 @@ def main() -> int:
             errors.append(f"tides: {e}"[:80])
 
     img = render(cfg, weather, tides, now, errors)
+
+    # The Kindle screen is natively portrait, so a landscape image is turned
+    # sideways before saving. Set rotate = 270 if it shows up upside down.
+    disp = cfg["display"]
+    if disp.get("orientation", "landscape") == "landscape" and not args.no_rotate:
+        img = img.rotate(int(disp.get("rotate", 90)), expand=True)
 
     out = args.out or cfg["display"]["output_path"]
     if not os.path.isabs(out):

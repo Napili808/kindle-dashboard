@@ -19,7 +19,12 @@ station_id = "1615680"
 station_name = "Kahului"
 
 [display]
-# Kindle Paperwhite 5 (11th gen) screen, portrait.
+# "landscape" (Kindle on its side) or "portrait" (upright).
+orientation = "landscape"
+# Landscape only: which way to turn the image. If the dashboard shows up
+# upside down on the Kindle, change 90 to 270.
+rotate = 90
+# Kindle Paperwhite 5 (11th gen) screen, native portrait size.
 width = 1236
 height = 1648
 output_path = "output/dashboard.png"

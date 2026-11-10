@@ -1,6 +1,6 @@
 # Kindle Dashboard
 
-An always-on e-ink dashboard for Maui: weather, a 24-hour temperature and rain chart, a 5-day forecast, and tides. A Raspberry Pi builds the image and a jailbroken Kindle Paperwhite shows it on the wall.
+An always-on e-ink dashboard for Maui, laid out for a Kindle turned on its side: weather, a 24-hour temperature and rain chart, a 5-day forecast, and tides. A Raspberry Pi builds the image and a jailbroken Kindle Paperwhite shows it on the wall.
 
 ![Dashboard preview (sample data)](docs/preview.png)
 
@@ -47,6 +47,9 @@ sudo systemctl enable --now kindle-dashboard.timer kindle-dashboard-web.service
 ```
 
 Check it from any device on your Wi-Fi: `http://<pi-ip>:8080/dashboard.png`
+(In landscape mode the file is saved turned sideways, because that's how the Kindle's screen expects it.)
+
+**Orientation:** `orientation = "landscape"` (default) or `"portrait"` in `config.toml`. If the landscape dashboard appears upside down on the Kindle, set `rotate = 270`.
 
 Get updates later:
 

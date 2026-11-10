@@ -187,12 +187,11 @@ def draw_current(d, wx, x, y, w):
     return y + 290
 
 
-def draw_hourly(d, wx, x, y, w):
+def draw_hourly(d, wx, x, y, w, h=200):
     y = section_title(d, x, y, w, "Next 24 hours")
     hours = wx["hourly"][:24]
     if len(hours) < 2:
         return y
-    h = 200
     pad_l, pad_r = 10, 10
     temps = [p["temp"] for p in hours]
     lo, hi = min(temps), max(temps)
@@ -232,7 +231,7 @@ def draw_hourly(d, wx, x, y, w):
     return base + 90
 
 
-def draw_forecast(d, wx, x, y, w):
+def draw_forecast(d, wx, x, y, w, compact=False):
     y = section_title(d, x, y, w, "5-day forecast")
     days = wx["daily"][:5]
     col = w / len(days)
@@ -244,10 +243,10 @@ def draw_forecast(d, wx, x, y, w):
         _, kind = weather_label(day["code"])
         draw_icon(d, kind, cx, y + 115, 110)
         hl = f"{round(day['hi'])}° / {round(day['lo'])}°"
-        f2 = font(34, bold=True)
+        f2 = font(28 if compact else 34, bold=True)
         d.text((cx - text_w(d, hl, f2) / 2, y + 190), hl, font=f2, fill=BLACK)
         pop = f"{round(day['pop'])}% rain"
-        f3 = font(28)
+        f3 = font(25 if compact else 28)
         d.text((cx - text_w(d, pop, f3) / 2, y + 236), pop, font=f3, fill=DARK)
         if i:
             d.line([(x + col * i, y + 10), (x + col * i, y + 270)], fill=LIGHT, width=2)
@@ -285,7 +284,7 @@ def draw_tides(d, cfg, tides, now, x, y, w):
     return y + 210
 
 
-def render(cfg: dict, weather: dict | None, tides: list[dict], now: datetime, errors: list[str]) -> Image.Image:
+def render_portrait(cfg: dict, weather: dict | None, tides: list[dict], now: datetime, errors: list[str]) -> Image.Image:
     disp = cfg["display"]
     W, H = disp["width"], disp["height"]
     img = Image.new("L", (W, H), WHITE)
@@ -314,3 +313,103 @@ def render(cfg: dict, weather: dict | None, tides: list[dict], now: datetime, er
         d.text((x, H - 50), msg[:110], font=f, fill=DARK)
 
     return img
+
+
+# ---------- landscape ----------
+
+def draw_current_compact(d, wx, x, y, w):
+    """Icon + big temp + condition on top, details in a 2-column grid below."""
+    cur = wx["current"]
+    today = wx["daily"][0]
+    label, kind = weather_label(cur["code"])
+    draw_icon(d, kind, x + 115, y + 125, 210)
+    tx = x + 255
+    d.text((tx, y - 10), f"{round(cur['temp'])}°", font=font(170, bold=True), fill=BLACK)
+    d.text((tx + 4, y + 190), label, font=font(40, bold=True), fill=BLACK)
+    y += 270
+
+    items = [
+        ("High / Low", f"{round(today['hi'])}° / {round(today['lo'])}°"),
+        ("Feels like", f"{round(cur['feels'])}°"),
+        ("Wind", f"{round(cur['wind'])} {wx['wind_units']} {compass(cur['wind_dir'])}"),
+        ("Humidity", f"{round(cur['humidity'])}%"),
+        ("Rain", f"{round(today['pop'])}%"),
+        ("Sun", f"{fmt_time(today['sunrise'])}–{fmt_time(today['sunset'])}"),
+    ]
+    col = w / 2
+    fk, fv = font(26), font(32, bold=True)
+    for i, (k, v) in enumerate(items):
+        cx = x + (i % 2) * col
+        cy = y + (i // 2) * 78
+        d.text((cx, cy), k, font=fk, fill=MID)
+        d.text((cx, cy + 30), v, font=fv, fill=BLACK)
+    return y + 3 * 78 + 10
+
+
+def draw_tides_list(d, cfg, tides, now, x, y, w):
+    station = cfg.get("tides", {}).get("station_name", "")
+    y = section_title(d, x, y, w, f"Tides · {station}" if station else "Tides")
+    upcoming = [t for t in tides if t["time"] >= now][:4]
+    if not upcoming:
+        d.text((x, y), "Tide data unavailable", font=font(32), fill=MID)
+        return y + 60
+    for i, t in enumerate(upcoming):
+        yy = y + i * 62
+        ay = yy + 22
+        if t["type"] == "High":
+            d.polygon([(x + 18, ay - 16), (x + 2, ay + 10), (x + 34, ay + 10)], fill=BLACK)
+        else:
+            d.polygon([(x + 18, ay + 10), (x + 2, ay - 16), (x + 34, ay - 16)], fill=BLACK)
+        bold = i == 0
+        d.text((x + 55, yy), t["type"], font=font(34, bold=bold), fill=BLACK if bold else DARK)
+        day = "" if t["time"].date() == now.date() else t["time"].strftime("%a ")
+        tm = day + fmt_time(t["time"])
+        ft = font(36, bold=True)
+        d.text((x + 210, yy - 2), tm, font=ft, fill=BLACK)
+        ht = f"{t['height']:.1f} ft"
+        fh = font(32)
+        d.text((x + w - text_w(d, ht, fh), yy), ht, font=fh, fill=DARK)
+    return y + len(upcoming) * 62
+
+
+def render_landscape(cfg, weather, tides, now, errors) -> Image.Image:
+    disp = cfg["display"]
+    W, H = max(disp["width"], disp["height"]), min(disp["width"], disp["height"])
+    img = Image.new("L", (W, H), WHITE)
+    d = ImageDraw.Draw(img)
+    margin, gap = 50, 70
+    x, w = margin, W - 2 * margin
+
+    y = draw_header(d, cfg, now, x, 35, w)
+    d.line([(x, y), (x + w, y)], fill=BLACK, width=5)
+    top = y + 35
+
+    left_w = 700
+    rx = x + left_w + gap
+    right_w = x + w - rx
+    d.line([(x + left_w + gap / 2, top), (x + left_w + gap / 2, H - 70)], fill=LIGHT, width=2)
+
+    # left column: now + tides
+    if weather:
+        ly = draw_current_compact(d, weather, x, top, left_w)
+    else:
+        d.text((x, top), "Weather unavailable", font=font(44, bold=True), fill=BLACK)
+        ly = top + 100
+    if cfg.get("tides", {}).get("enabled"):
+        draw_tides_list(d, cfg, tides, now, x, ly + 10, left_w)
+
+    # right column: 24h + 5-day
+    if weather:
+        ry = draw_hourly(d, weather, rx, top - 10, right_w, h=290)
+        draw_forecast(d, weather, rx, ry + 5, right_w, compact=True)
+
+    if errors:
+        d.text((x, H - 45), ("Problems: " + "; ".join(errors))[:140], font=font(24), fill=DARK)
+    return img
+
+
+def render(cfg, weather, tides, now, errors) -> Image.Image:
+    """Returns the image upright for viewing. make_dashboard rotates it for the Kindle."""
+    if cfg.get("display", {}).get("orientation", "landscape") == "portrait":
+        return render_portrait(cfg, weather, tides, now, errors)
+    return render_landscape(cfg, weather, tides, now, errors)
