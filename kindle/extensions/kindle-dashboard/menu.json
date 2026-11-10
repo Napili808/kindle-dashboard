@@ -1,0 +1,13 @@
+{
+  "items": [
+    {
+      "name": "Kindle Dashboard",
+      "priority": -10,
+      "items": [
+        { "name": "Start dashboard", "priority": 1, "action": "./dashboard.sh" },
+        { "name": "Test connection to Pi", "priority": 2, "action": "./test.sh" },
+        { "name": "Stop dashboard (back to Kindle)", "priority": 3, "action": "./stop.sh" }
+      ]
+    }
+  ]
+}
