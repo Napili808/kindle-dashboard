@@ -77,6 +77,9 @@ def main() -> int:
         from dashboard.data import fetch_tides, fetch_weather
         try:
             weather = fetch_weather(cfg)
+            if weather.get("stale_since"):
+                t = weather["stale_since"].strftime("%I:%M %p").lstrip("0")
+                errors.append(f"weather service down, showing forecast from {t}")
         except Exception as e:  # keep drawing even if one source is down
             weather = None
             errors.append(f"weather: {e}"[:80])

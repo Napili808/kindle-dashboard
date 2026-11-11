@@ -309,7 +309,7 @@ def render_portrait(cfg: dict, weather: dict | None, tides: list[dict], now: dat
 
     if errors:
         f = font(24)
-        msg = "Problems: " + "; ".join(errors)
+        msg = "Note: " + "; ".join(errors)
         d.text((x, H - 50), msg[:110], font=f, fill=DARK)
 
     return img
@@ -404,7 +404,7 @@ def render_landscape(cfg, weather, tides, now, errors) -> Image.Image:
         draw_forecast(d, weather, rx, ry + 5, right_w, compact=True)
 
     if errors:
-        d.text((x, H - 45), ("Problems: " + "; ".join(errors))[:140], font=font(24), fill=DARK)
+        d.text((x, H - 45), ("Note: " + "; ".join(errors))[:140], font=font(24), fill=DARK)
     return img
 
 

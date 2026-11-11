@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import json
+import os
+import time
 from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 
@@ -9,12 +12,45 @@ import requests
 
 USER_AGENT = "kindle-dashboard (github.com/Napili808/kindle-dashboard)"
 TIMEOUT = 20
+RETRY_WAITS = (5, 20)  # seconds to wait before the 2nd and 3rd tries
+CACHE_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "cache")
 
 
 def _get(url: str, params: dict) -> dict:
-    resp = requests.get(url, params=params, timeout=TIMEOUT, headers={"User-Agent": USER_AGENT})
-    resp.raise_for_status()
-    return resp.json()
+    """GET with a couple of retries, since free APIs sometimes blip (503s, timeouts)."""
+    last = None
+    for attempt in range(len(RETRY_WAITS) + 1):
+        try:
+            resp = requests.get(url, params=params, timeout=TIMEOUT, headers={"User-Agent": USER_AGENT})
+            resp.raise_for_status()
+            return resp.json()
+        except (requests.RequestException, ValueError) as e:
+            last = e
+            if attempt < len(RETRY_WAITS):
+                time.sleep(RETRY_WAITS[attempt])
+    raise last
+
+
+def _get_cached(name: str, url: str, params: dict, max_age_hours: float):
+    """Fetch, saving each good answer. If the service is down, fall back to the
+    last good answer (if it's recent enough). Returns (data, stale_since or None)."""
+    path = os.path.join(CACHE_DIR, f"{name}.json")
+    try:
+        data = _get(url, params)
+        os.makedirs(CACHE_DIR, exist_ok=True)
+        with open(path + ".tmp", "w") as f:
+            json.dump({"fetched_at": time.time(), "data": data}, f)
+        os.replace(path + ".tmp", path)
+        return data, None
+    except Exception as fetch_error:
+        try:
+            with open(path) as f:
+                cached = json.load(f)
+        except (OSError, ValueError):
+            raise fetch_error from None
+        if time.time() - cached["fetched_at"] > max_age_hours * 3600:
+            raise fetch_error
+        return cached["data"], datetime.fromtimestamp(cached["fetched_at"])
 
 
 def fetch_weather(cfg: dict) -> dict:
@@ -34,7 +70,7 @@ def fetch_weather(cfg: dict) -> dict:
     }
     if imperial:
         params.update(temperature_unit="fahrenheit", wind_speed_unit="mph")
-    raw = _get("https://api.open-meteo.com/v1/forecast", params)
+    raw, stale_since = _get_cached("weather", "https://api.open-meteo.com/v1/forecast", params, 12)
 
     tz = ZoneInfo(loc["timezone"])
     now = datetime.now(tz)
@@ -63,6 +99,7 @@ def fetch_weather(cfg: dict) -> dict:
     ]
 
     return {
+        "stale_since": stale_since.astimezone(tz) if stale_since else None,
         "units": "F" if imperial else "C",
         "wind_units": "mph" if imperial else "km/h",
         "current": {
@@ -98,7 +135,8 @@ def fetch_tides(cfg: dict) -> list[dict]:
         "interval": "hilo",
         "format": "json",
     }
-    raw = _get("https://api.tidesandcurrents.noaa.gov/api/prod/datagetter", params)
+    # Tide predictions cover 60 hours, so a cached copy stays useful for a day.
+    raw, _ = _get_cached("tides", "https://api.tidesandcurrents.noaa.gov/api/prod/datagetter", params, 24)
     if "predictions" not in raw:
         raise RuntimeError(f"NOAA error: {raw.get('error', raw)}")
     tides = []
