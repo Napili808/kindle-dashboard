@@ -1,20 +1,21 @@
 # Kindle Dashboard
 
-An always-on e-ink dashboard for Maui, laid out for a Kindle turned on its side: weather, a 24-hour temperature and rain chart, a 5-day forecast, and tides. A Raspberry Pi builds the image and a jailbroken Kindle Paperwhite shows it on the wall.
+An always-on e-ink dashboard for Maui, laid out for a Kindle turned on its side: a big clock, weather, a 24-hour temperature and rain chart, a 5-day forecast, tides, and air quality / vog / UV. A Raspberry Pi builds the image and a jailbroken Kindle Paperwhite shows it on the wall.
 
 ![Dashboard preview (sample data)](docs/preview.png)
 
 ## How it works
 
 ```
-Open-Meteo (weather) ─┐
-                      ├─► Raspberry Pi 3 ── builds dashboard.png every 30 min ── serves it on :8080
-NOAA (tides) ─────────┘                                                              │
-                                                     Kindle Paperwhite 5 ◄── downloads & displays
+Open-Meteo (weather, air, UV) ─┐
+                               ├─► Raspberry Pi 3 ── redraws dashboard.png every minute ── serves it on :8080
+NOAA (tides) ──────────────────┘                                                              │
+                                                              Kindle Paperwhite 5 ◄── downloads & displays
 ```
 
 - **Light on purpose.** The Pi also runs Pi-hole and has 1GB of RAM, so the image is drawn directly with Python + Pillow. No headless browser.
-- **Free data, no API keys.** [Open-Meteo](https://open-meteo.com/) for weather, [NOAA CO-OPS](https://tidesandcurrents.noaa.gov/) for tides.
+- **Free data, no API keys.** [Open-Meteo](https://open-meteo.com/) for weather, air quality and UV, [NOAA CO-OPS](https://tidesandcurrents.noaa.gov/) for tides.
+- **Clock that stays current.** The image redraws every minute, but weather and air are only downloaded every 30 minutes (tides every 3 hours), so the free services aren't hammered.
 - **Fails gracefully.** If one source is down, the rest still draws and a note appears at the bottom.
 
 ## Hardware
@@ -30,7 +31,7 @@ SSH into the Pi, then:
 
 ```bash
 sudo apt update
-sudo apt install -y git python3-pil python3-requests fonts-dejavu-core
+sudo apt install -y git python3-pil python3-requests fonts-dejavu-core fonts-dejavu-extra
 git clone https://github.com/Napili808/kindle-dashboard.git
 cd kindle-dashboard
 cp config.example.toml config.toml        # edit location / tide station if you like
@@ -51,10 +52,17 @@ Check it from any device on your Wi-Fi: `http://<pi-ip>:8080/dashboard.png`
 
 **Orientation:** `orientation = "landscape"` (default) or `"portrait"` in `config.toml`. `rotate = 270` puts the Kindle logo on the right; `rotate = 90` puts it on the left.
 
+**Layout:** `layout = "clock"` (default: big clock, plus an air · vog · UV row) or `"classic"` (the original header with day and date).
+
+**Air · vog · UV:** air quality is the US AQI. Vog is a rough level from sulfur dioxide; the cut-offs are `vog_so2_thresholds` in `config.toml`. Treat it as a guide, not a health advisory. The UV box shows today's peak, switching to tomorrow's after the sun goes down.
+
 Get updates later:
 
 ```bash
 cd ~/kindle-dashboard && git pull
+# if pi/*.timer or pi/*.service changed, copy them again and reload:
+sudo cp pi/kindle-dashboard.* pi/kindle-dashboard-web.service /etc/systemd/system/
+sudo systemctl daemon-reload && sudo systemctl restart kindle-dashboard.timer
 ```
 
 ## Kindle setup
@@ -66,7 +74,7 @@ Uses **scriptlets**, the current way to run homebrew on jailbroken Kindles (KUAL
 3. Open both files in `kindle/scriptlets/` and set `PI_IP` to your Pi's IP address.
 4. Plug the Kindle into your computer and copy both `.sh` files into the Kindle's `documents` folder.
 5. Eject. Turn Wi-Fi on. In your library, tap **Dashboard - Test**. An "OK" line should appear near the bottom of the screen.
-6. Tap **Dashboard - Start**. Keep the Kindle plugged into power; it stays awake with Wi-Fi on.
+6. Tap **Dashboard - Start**. Keep the Kindle plugged into power; it stays awake with Wi-Fi on. It updates quietly every minute and does a full black-white flash every 30 minutes to clear e-ink ghosting.
 
 To get back to the normal Kindle: hold the power button ~40 seconds until it restarts.
 
@@ -77,11 +85,14 @@ The 5.19.x firmware details (upstart UI jobs) come from TRMNL's MIT-licensed [tr
 ```bash
 pip install -r requirements.txt
 python3 make_dashboard.py --sample      # made-up data, no internet needed
+python3 make_dashboard.py --sample --at 12:59 --no-rotate --out preview.png   # upright, at a set time
 ```
 
 ## Roadmap
 
 - [ ] Google Calendar events (via private iCal link in `config.toml`)
+- [x] Big clock, refreshed every minute
+- [x] Air quality, vog and UV
 - [ ] Surf / wind conditions for OC6 paddling
 - [ ] Kindle scriptlets tested on real hardware
 - [ ] Night mode (lighter refresh schedule overnight)

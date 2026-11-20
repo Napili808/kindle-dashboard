@@ -4,8 +4,8 @@
 #
 # Kindle scriptlet: copy this file into the Kindle's documents folder, then tap
 # it in your library. It hides the normal Kindle screen and shows the dashboard
-# image from the Raspberry Pi, refreshing at :02 and :32 past each hour (a couple
-# of minutes after the Pi rebuilds the image at :00 and :30).
+# image from the Raspberry Pi, refreshing every minute (a few seconds after the
+# Pi redraws it), with a full black-white flash every 30 minutes to clear ghosting.
 #
 # To stop: hold the power button ~40 seconds until the Kindle restarts.
 # Keep the Kindle plugged in; it stays awake with Wi-Fi on.
@@ -14,9 +14,9 @@
 PI_IP="192.168.1.50"
 # -------------------------------------------------------------------------------------
 
-REFRESH_SECONDS=1800      # 30 minutes, matches the Pi timer
-OFFSET_SECONDS=120        # update 2 minutes after the Pi's :00 / :30 rebuild
-FULL_FLASH_EVERY=4
+REFRESH_SECONDS=60        # every minute, matches the Pi timer
+OFFSET_SECONDS=12         # a few seconds after the Pi redraws at :00
+FULL_FLASH_EVERY=30       # full flash every 30 updates (30 minutes)
 PI_URL="http://${PI_IP}:8080/dashboard.png"
 LOOP=/tmp/kindle-dashboard-loop.sh
 
@@ -55,11 +55,11 @@ while true; do
             eips -g "\$IMG"
         fi
         i=\$((i + 1))
-        # Sleep until the next :02 or :32. Epoch math works because Hawaii's
-        # offset from UTC is a whole number of hours.
+        # Sleep until $OFFSET_SECONDS past the next minute, just after the Pi
+        # has redrawn the image.
         NOW=\$(date +%s)
         WAIT=\$(( ($OFFSET_SECONDS - NOW % $REFRESH_SECONDS + $REFRESH_SECONDS) % $REFRESH_SECONDS ))
-        [ "\$WAIT" -lt 30 ] && WAIT=\$((WAIT + $REFRESH_SECONDS))
+        [ "\$WAIT" -lt 5 ] && WAIT=\$((WAIT + $REFRESH_SECONDS))
         sleep "\$WAIT"
     else
         eips 1 38 "Can't reach Pi at $PI_IP - retrying in 1 min   "

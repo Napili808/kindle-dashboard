@@ -31,10 +31,22 @@ def _get(url: str, params: dict) -> dict:
     raise last
 
 
-def _get_cached(name: str, url: str, params: dict, max_age_hours: float):
+def _get_cached(name: str, url: str, params: dict, max_age_hours: float, fresh_minutes: float = 0):
     """Fetch, saving each good answer. If the service is down, fall back to the
-    last good answer (if it's recent enough). Returns (data, stale_since or None)."""
+    last good answer (if it's recent enough). Returns (data, stale_since or None).
+
+    If the saved answer is younger than fresh_minutes, it's used without asking
+    the service again. The image redraws every minute for the clock, but the
+    weather only needs checking every half hour or so."""
     path = os.path.join(CACHE_DIR, f"{name}.json")
+    if fresh_minutes:
+        try:
+            with open(path) as f:
+                cached = json.load(f)
+            if time.time() - cached["fetched_at"] < fresh_minutes * 60:
+                return cached["data"], None
+        except (OSError, ValueError, KeyError):
+            pass
     try:
         data = _get(url, params)
         os.makedirs(CACHE_DIR, exist_ok=True)
@@ -51,6 +63,10 @@ def _get_cached(name: str, url: str, params: dict, max_age_hours: float):
         if time.time() - cached["fetched_at"] > max_age_hours * 3600:
             raise fetch_error
         return cached["data"], datetime.fromtimestamp(cached["fetched_at"])
+
+
+def _fresh_minutes(cfg: dict) -> float:
+    return float(cfg.get("refresh", {}).get("data_minutes", 30))
 
 
 def fetch_weather(cfg: dict) -> dict:
@@ -70,7 +86,8 @@ def fetch_weather(cfg: dict) -> dict:
     }
     if imperial:
         params.update(temperature_unit="fahrenheit", wind_speed_unit="mph")
-    raw, stale_since = _get_cached("weather", "https://api.open-meteo.com/v1/forecast", params, 12)
+    raw, stale_since = _get_cached("weather", "https://api.open-meteo.com/v1/forecast", params, 12,
+                                   fresh_minutes=_fresh_minutes(cfg))
 
     tz = ZoneInfo(loc["timezone"])
     now = datetime.now(tz)
@@ -136,7 +153,8 @@ def fetch_tides(cfg: dict) -> list[dict]:
         "format": "json",
     }
     # Tide predictions cover 60 hours, so a cached copy stays useful for a day.
-    raw, _ = _get_cached("tides", "https://api.tidesandcurrents.noaa.gov/api/prod/datagetter", params, 24)
+    raw, _ = _get_cached("tides", "https://api.tidesandcurrents.noaa.gov/api/prod/datagetter", params, 24,
+                         fresh_minutes=max(_fresh_minutes(cfg), 180))
     if "predictions" not in raw:
         raise RuntimeError(f"NOAA error: {raw.get('error', raw)}")
     tides = []
@@ -144,3 +162,46 @@ def fetch_tides(cfg: dict) -> list[dict]:
         ts = datetime.strptime(p["t"], "%Y-%m-%d %H:%M").replace(tzinfo=tz)
         tides.append({"time": ts, "height": float(p["v"]), "type": "High" if p["type"] == "H" else "Low"})
     return tides
+
+
+def fetch_air(cfg: dict) -> dict | None:
+    """Air quality, sulfur dioxide (for vog) and UV from Open-Meteo's air-quality service."""
+    if not cfg.get("air", {}).get("enabled", True):
+        return None
+    loc = cfg["location"]
+    params = {
+        "latitude": loc["latitude"],
+        "longitude": loc["longitude"],
+        "timezone": loc["timezone"],
+        "forecast_days": 2,
+        "current": "us_aqi,pm2_5,sulphur_dioxide,uv_index",
+        "hourly": "uv_index",
+    }
+    raw, _ = _get_cached("air", "https://air-quality-api.open-meteo.com/v1/air-quality", params, 6,
+                         fresh_minutes=_fresh_minutes(cfg))
+    tz = ZoneInfo(loc["timezone"])
+    now = datetime.now(tz)
+    cur = raw["current"]
+
+    hours = [(datetime.fromisoformat(t).replace(tzinfo=tz), uv or 0)
+             for t, uv in zip(raw["hourly"]["time"], raw["hourly"]["uv_index"])]
+    # Show today's UV until the sun's done for the day, then tomorrow's.
+    today = [(t, uv) for t, uv in hours if t.date() == now.date()]
+    rest_of_today = [uv for t, uv in today if t >= now.replace(minute=0, second=0, microsecond=0)]
+    if rest_of_today and max(rest_of_today) >= 1:
+        day, which = today, "today"
+    else:
+        tomorrow = (now + timedelta(days=1)).date()
+        day, which = [(t, uv) for t, uv in hours if t.date() == tomorrow], "tomorrow"
+    uv_max = max((uv for _, uv in day), default=0)
+    high = [t for t, uv in day if uv >= 6]  # "high" or worse on the UV scale
+
+    return {
+        "aqi": cur.get("us_aqi") or 0,
+        "pm25": cur.get("pm2_5") or 0,
+        "so2": cur.get("sulphur_dioxide") or 0,
+        "uv_now": cur.get("uv_index") or 0,
+        "uv_max": uv_max,
+        "uv_window": (high[0], high[-1]) if high else None,
+        "uv_day": which,
+    }
