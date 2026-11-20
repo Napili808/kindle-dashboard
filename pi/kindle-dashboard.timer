@@ -1,10 +1,12 @@
-# Run the dashboard build every 30 minutes, and once shortly after boot.
+# Redraw the dashboard every minute (for the clock), and once shortly after boot.
+# Weather, air and tide data are reused between redraws; see [refresh] in config.toml.
 [Unit]
-Description=Rebuild Kindle dashboard every 30 minutes
+Description=Rebuild Kindle dashboard every minute
 
 [Timer]
 OnBootSec=1min
-OnCalendar=*:0/30
+OnCalendar=*:*:00
+AccuracySec=1s
 Persistent=true
 
 [Install]

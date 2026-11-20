@@ -18,9 +18,23 @@ enabled = true
 station_id = "1615680"
 station_name = "Kahului"
 
+[air]
+# Air quality, vog and UV from Open-Meteo's free air-quality service.
+enabled = true
+# Vog level from sulfur dioxide in µg/m³: below the 1st number is "Low", then
+# "Light", "Moderate", and "Heavy" from the 3rd number up. Rough guide only.
+vog_so2_thresholds = [10, 50, 200]
+
+[refresh]
+# The image redraws every minute so the clock stays current. Weather and air
+# are only re-downloaded this often (tides every 3 hours).
+data_minutes = 30
+
 [display]
 # "landscape" (Kindle on its side) or "portrait" (upright).
 orientation = "landscape"
+# Landscape only: "clock" (big clock, weather, air/UV) or "classic" (the original).
+layout = "clock"
 # Landscape only: which way to turn the image.
 # 270 = Kindle logo on the right, 90 = Kindle logo on the left.
 rotate = 270

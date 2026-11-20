@@ -56,7 +56,9 @@ def sample_data(cfg: dict, now: datetime):
     for i in range(6):
         tides.append({"time": t + timedelta(hours=6 * i, minutes=13 * i),
                       "height": [1.9, 0.2, 1.4, 0.5][i % 4], "type": "High" if i % 2 == 0 else "Low"})
-    return weather, tides
+    air = {"aqi": 42, "pm25": 9, "so2": 4, "uv_now": 0, "uv_max": 9, "uv_day": "tomorrow",
+           "uv_window": (base.replace(hour=11) + timedelta(days=1), base.replace(hour=14) + timedelta(days=1))}
+    return weather, tides, air
 
 
 def main() -> int:
@@ -65,16 +67,20 @@ def main() -> int:
     ap.add_argument("--sample", action="store_true", help="use made-up data instead of fetching")
     ap.add_argument("--out", help="override output path")
     ap.add_argument("--no-rotate", action="store_true", help="save upright (for previews)")
+    ap.add_argument("--at", help="pretend it's this time, e.g. 23:15 (for previews)")
     args = ap.parse_args()
 
     cfg = load_config(args.config)
     now = datetime.now(ZoneInfo(cfg["location"]["timezone"]))
+    if args.at:
+        hh, mm = (int(v) for v in args.at.split(":"))
+        now = now.replace(hour=hh, minute=mm)
     errors: list[str] = []
 
     if args.sample:
-        weather, tides = sample_data(cfg, now)
+        weather, tides, air = sample_data(cfg, now)
     else:
-        from dashboard.data import fetch_tides, fetch_weather
+        from dashboard.data import fetch_air, fetch_tides, fetch_weather
         try:
             weather = fetch_weather(cfg)
             if weather.get("stale_since"):
@@ -88,8 +94,13 @@ def main() -> int:
         except Exception as e:
             tides = []
             errors.append(f"tides: {e}"[:80])
+        try:
+            air = fetch_air(cfg)
+        except Exception as e:
+            air = None
+            errors.append(f"air: {e}"[:80])
 
-    img = render(cfg, weather, tides, now, errors)
+    img = render(cfg, weather, tides, now, errors, air=air)
 
     # The Kindle screen is natively portrait, so a landscape image is turned
     # sideways before saving. Set rotate = 270 if it shows up upside down.

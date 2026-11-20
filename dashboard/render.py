@@ -8,7 +8,8 @@ from __future__ import annotations
 
 import math
 import os
-from datetime import datetime
+from functools import lru_cache
+from datetime import datetime, timedelta
 
 from PIL import Image, ImageDraw, ImageFont
 
@@ -35,8 +36,8 @@ WEATHER_CODES = {
 }
 
 
-def _font_path(bold: bool) -> str | None:
-    name = "DejaVuSans-Bold.ttf" if bold else "DejaVuSans.ttf"
+def _font_path(bold: bool, condensed: bool = False) -> str | None:
+    name = "DejaVuSans" + ("Condensed" if condensed else "") + ("-Bold" if bold else "") + ".ttf"
     for d in FONT_DIRS:
         p = os.path.join(d, name)
         if os.path.exists(p):
@@ -44,11 +45,23 @@ def _font_path(bold: bool) -> str | None:
     return None
 
 
-def font(size: int, bold: bool = False):
-    path = _font_path(bold)
+@lru_cache(maxsize=None)
+def font(size: int, bold: bool = False, condensed: bool = False):
+    path = _font_path(bold, condensed) or _font_path(bold)
     if path:
         return ImageFont.truetype(path, size)
     return ImageFont.load_default()
+
+
+def fit_font(d, sample: str, max_w: float, bold: bool = True, condensed: bool = True, start: int = 100):
+    """Largest font where `sample` still fits in max_w pixels."""
+    size = start
+    step = font(start, bold, condensed)
+    # jump close to the answer first (text width grows in proportion to size)
+    size = max(start, int(start * max_w / max(text_w(d, sample, step), 1)) - 6)
+    while text_w(d, sample, font(size + 2, bold, condensed)) <= max_w and size < 400:
+        size += 2
+    return font(size, bold, condensed)
 
 
 def fmt_time(dt: datetime) -> str:
@@ -408,8 +421,142 @@ def render_landscape(cfg, weather, tides, now, errors) -> Image.Image:
     return img
 
 
-def render(cfg, weather, tides, now, errors) -> Image.Image:
+# ---------- air · vog · UV ----------
+
+AQI_LEVELS = [(50, "Good"), (100, "Moderate"), (150, "Unhealthy for some"),
+              (200, "Unhealthy"), (300, "Very unhealthy"), (10_000, "Hazardous")]
+UV_LEVELS = [(2, "Low"), (5, "Moderate"), (7, "High"), (10, "Very high"), (99, "Extreme")]
+
+
+def level(value: float, table) -> str:
+    for limit, name in table:
+        if value <= limit:
+            return name
+    return table[-1][1]
+
+
+def vog_level(so2: float, cfg: dict) -> str:
+    """Rough vog level from sulfur dioxide (µg/m³). Thresholds live in config.toml."""
+    light, moderate, heavy = cfg.get("air", {}).get("vog_so2_thresholds", [10, 50, 200])
+    if so2 < light:
+        return "Low"
+    if so2 < moderate:
+        return "Light"
+    if so2 < heavy:
+        return "Moderate"
+    return "Heavy"
+
+
+def fmt_hour_short(dt: datetime) -> str:
+    return dt.strftime("%I%p").lstrip("0").lower()
+
+
+def draw_air(d, cfg, air, x, y, w):
+    y = section_title(d, x, y, w, "Air · vog · UV")
+    if not air:
+        d.text((x, y), "Air data unavailable", font=font(32), fill=MID)
+        return y + 60
+
+    aqi = air["aqi"]
+    uv = air["uv_max"]
+    if air["uv_window"]:
+        a, b = air["uv_window"]
+        uv_sub = f"peak {fmt_hour_short(a)}–{fmt_hour_short(b + timedelta(hours=1))}"
+    else:
+        uv_sub = "no high-UV hours"
+    if air["uv_day"] == "tomorrow":
+        uv_sub = uv_sub.replace("peak ", "tmrw ").replace("no high-UV hours", "tmrw: no high UV")
+
+    cols = [
+        ("Air quality", f"{round(aqi)}", "", min(aqi / 200, 1), level(aqi, AQI_LEVELS)),
+        ("Vog", vog_level(air["so2"], cfg), "", min(air["so2"] / 200, 1),
+         f"SO₂ {air['so2']:.0f} µg/m³"),
+        ("UV index", f"{round(uv)}", level(uv, UV_LEVELS), min(uv / 11, 1), uv_sub),
+    ]
+    cw = w / len(cols)
+    for i, (k, v, tag, frac, sub) in enumerate(cols):
+        x0 = x + cw * i + (0 if i == 0 else 18)
+        bw = cw - (18 if i == 0 else 36)
+        d.text((x0, y), k, font=font(26), fill=MID)
+        fv = font(42, bold=True)
+        if text_w(d, v, fv) > bw:
+            fv = font(42, bold=True, condensed=True)
+        d.text((x0, y + 32), v, font=fv, fill=BLACK)
+        if tag:
+            ft = font(24, bold=True)
+            tx = x0 + text_w(d, v, fv) + 10
+            # shorten the tag if it would run past the column
+            while tag and tx + text_w(d, tag, ft) > x0 + bw:
+                tag = tag.rsplit(" ", 1)[0] if " " in tag else ""
+            d.text((tx, y + 50), tag, font=ft, fill=DARK)
+        d.rounded_rectangle([x0, y + 92, x0 + bw, y + 104], radius=6, outline=BLACK, width=2)
+        if frac > 0.03:
+            d.rounded_rectangle([x0, y + 92, x0 + bw * frac, y + 104], radius=6, fill=BLACK)
+        fs = font(24)
+        if text_w(d, sub, fs) > bw:
+            fs = font(24, condensed=True)
+        d.text((x0, y + 112), sub, font=fs, fill=DARK)
+    return y + 150
+
+
+# ---------- landscape, clock layout ----------
+
+def render_clock(cfg, weather, tides, air, now, errors) -> Image.Image:
+    """Big clock top-left, weather + tides below it; 24h chart, 5-day and air on the right."""
+    disp = cfg["display"]
+    W, H = max(disp["width"], disp["height"]), min(disp["width"], disp["height"])
+    img = Image.new("L", (W, H), WHITE)
+    d = ImageDraw.Draw(img)
+    margin, gap, top = 50, 60, 30
+    x, w = margin, W - 2 * margin
+    left_w = 760
+    rx = x + left_w + gap
+    right_w = x + w - rx
+    mid = x + left_w + gap / 2
+
+    # clock: sized so the widest time (12:59) fills the column beside AM/PM
+    hm = now.strftime("%I:%M").lstrip("0")
+    ap = now.strftime("%p")
+    fa = font(46, bold=True)
+    fh = fit_font(d, "12:59", left_w - text_w(d, "PM", fa) - 14)
+    l, t, r, b = d.textbbox((0, 0), hm, font=fh)
+    d.text((x - l, top - t), hm, font=fh, fill=BLACK)
+    d.text((x + r - l + 14, top + 4), ap, font=fa, fill=BLACK)
+    y = top + (b - t) + 28
+    d.text((x, y), now.strftime("%A, %B %-d"), font=font(46, bold=True), fill=DARK)
+    y += 72
+    d.line([(x, y), (x + left_w, y)], fill=BLACK, width=5)
+    y += 28
+
+    if weather:
+        y = draw_current_compact(d, weather, x, y, left_w)
+    else:
+        d.text((x, y), "Weather unavailable", font=font(44, bold=True), fill=BLACK)
+        y += 100
+    if cfg.get("tides", {}).get("enabled"):
+        draw_tides_list(d, cfg, tides, now, x, y, left_w)
+
+    d.line([(mid, top), (mid, H - 60)], fill=LIGHT, width=2)
+    loc = cfg["location"]["name"]
+    f = font(30)
+    d.text((x + w - text_w(d, loc, f), top), loc, font=f, fill=DARK)
+    ry = top + 45
+    if weather:
+        ry = draw_hourly(d, weather, rx, ry, right_w, h=330)
+        ry = draw_forecast(d, weather, rx, ry + 20, right_w, compact=True) - 10
+    if cfg.get("air", {}).get("enabled", True):
+        draw_air(d, cfg, air, rx, ry, right_w)
+
+    if errors:
+        d.text((x, H - 40), ("Note: " + "; ".join(errors))[:140], font=font(22), fill=DARK)
+    return img
+
+
+def render(cfg, weather, tides, now, errors, air=None) -> Image.Image:
     """Returns the image upright for viewing. make_dashboard rotates it for the Kindle."""
-    if cfg.get("display", {}).get("orientation", "landscape") == "portrait":
+    disp = cfg.get("display", {})
+    if disp.get("orientation", "landscape") == "portrait":
         return render_portrait(cfg, weather, tides, now, errors)
-    return render_landscape(cfg, weather, tides, now, errors)
+    if disp.get("layout", "clock") == "classic":
+        return render_landscape(cfg, weather, tides, now, errors)
+    return render_clock(cfg, weather, tides, air, now, errors)
